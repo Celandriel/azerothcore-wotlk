@@ -302,6 +302,14 @@ ObjectGuid::LowType WorldSession::GetGuidLow() const
 /// Send a packet to the client
 void WorldSession::SendPacket(WorldPacket const* packet)
 {
+    if (packet->GetOpcode() == NULL_OPCODE)
+    {
+        LOG_ERROR("network.opcode", "{} send NULL_OPCODE", GetPlayerInfo());
+        return;
+    }
+
+    sScriptMgr->OnPlayerbotPacketSent(GetPlayer(), packet);
+
     if (!m_Socket)
         return;
 
