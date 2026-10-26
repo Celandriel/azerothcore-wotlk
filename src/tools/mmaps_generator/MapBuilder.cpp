@@ -30,6 +30,33 @@
 
 namespace MMAP
 {
+    // Slopes steeper than this, but still under walkableSlopeAngle, are tagged NAV_GROUND_STEEP: walkable,
+    // but a path filter can avoid them or give them a cost.
+    static constexpr float STEEP_SLOPE_ANGLE = 50.0f;
+
+    static void AlmostUnwalkableTriangles(float walkableSlopeAngle, float const* verts, int const* tris, int nt,
+                                          unsigned char* areas)
+    {
+        float const walkableThr = std::cos(walkableSlopeAngle / 180.0f * static_cast<float>(M_PI));
+
+        for (int i = 0; i < nt; ++i)
+        {
+            if (areas[i] == RC_NULL_AREA)
+                continue;
+
+            int const* tri = &tris[i * 3];
+
+            float e0[3], e1[3], norm[3];
+            rcVsub(e0, &verts[tri[1] * 3], &verts[tri[0] * 3]);
+            rcVsub(e1, &verts[tri[2] * 3], &verts[tri[0] * 3]);
+            rcVcross(norm, e0, e1);
+            rcVnormalize(norm);
+
+            if (norm[1] <= walkableThr)
+                areas[i] = NAV_GROUND_STEEP;
+        }
+    }
+
     TileBuilder::TileBuilder(MapBuilder* mapBuilder, bool skipLiquid, bool debugOutput) :
             m_debugOutput(debugOutput),
             m_mapBuilder(mapBuilder),
@@ -658,6 +685,7 @@ namespace MMAP
                 unsigned char* triFlags = new unsigned char[tTriCount];
                 memset(triFlags, NAV_GROUND, tTriCount * sizeof(unsigned char));
                 rcClearUnwalkableTriangles(m_rcContext, tileCfg.walkableSlopeAngle, tVerts, tVertCount, tTris, tTriCount, triFlags);
+                AlmostUnwalkableTriangles(STEEP_SLOPE_ANGLE, tVerts, tTris, tTriCount, triFlags);
                 rcRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, triFlags, tTriCount, *tile.solid, config.walkableClimb);
                 delete[] triFlags;
 
