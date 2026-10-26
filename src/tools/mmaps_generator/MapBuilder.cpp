@@ -57,6 +57,38 @@ namespace MMAP
         }
     }
 
+    // Recast merges spans whose tops are within walkableClimb and keeps the higher area id. The NavTerrain flag
+    // values pick the wrong winner, so triangles are rasterized with these ranks and mapped back afterwards.
+    // Ground beats water, so shallow water stays walkable; lava, slime and steep ground beat ground; deep water
+    // loses to everything, so it never spreads onto a shore. Same idea as TrinityCore's NavArea ordering.
+    static unsigned char ToMergeRank(unsigned char terrain)
+    {
+        switch (terrain)
+        {
+            case NAV_DEEP_WATER:   return 1;
+            case NAV_WATER:        return 2;
+            case NAV_GROUND:       return 3;
+            case NAV_MAGMA:        return 4;
+            case NAV_SLIME:        return 5;
+            case NAV_GROUND_STEEP: return 6;
+            default:               return terrain;
+        }
+    }
+
+    static unsigned char FromMergeRank(unsigned char rank)
+    {
+        switch (rank)
+        {
+            case 1:  return NAV_DEEP_WATER;
+            case 2:  return NAV_WATER;
+            case 3:  return NAV_GROUND;
+            case 4:  return NAV_MAGMA;
+            case 5:  return NAV_SLIME;
+            case 6:  return NAV_GROUND_STEEP;
+            default: return rank;
+        }
+    }
+
     TileBuilder::TileBuilder(MapBuilder* mapBuilder, bool skipLiquid, bool debugOutput) :
             m_debugOutput(debugOutput),
             m_mapBuilder(mapBuilder),
@@ -630,7 +662,9 @@ namespace MMAP
         int lVertCount = meshData.liquidVerts.size() / 3;
         int* lTris = meshData.liquidTris.getCArray();
         int lTriCount = meshData.liquidTris.size() / 3;
-        uint8* lTriFlags = meshData.liquidType.getCArray();
+        std::vector<unsigned char> lTriRanks(meshData.liquidType.size());
+        for (int i = 0; i < meshData.liquidType.size(); ++i)
+            lTriRanks[i] = ToMergeRank(meshData.liquidType[i]);
 
         ResolvedMeshConfig cfg = m_mapBuilder->getConfig().GetConfigForTile(mapID, tileX, tileY);
         int tilesPerMap = cfg.tilesPerMapEdge;
@@ -686,6 +720,8 @@ namespace MMAP
                 memset(triFlags, NAV_GROUND, tTriCount * sizeof(unsigned char));
                 rcClearUnwalkableTriangles(m_rcContext, tileCfg.walkableSlopeAngle, tVerts, tVertCount, tTris, tTriCount, triFlags);
                 AlmostUnwalkableTriangles(STEEP_SLOPE_ANGLE, tVerts, tTris, tTriCount, triFlags);
+                for (int i = 0; i < tTriCount; ++i)
+                    triFlags[i] = ToMergeRank(triFlags[i]);
                 rcRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, triFlags, tTriCount, *tile.solid, config.walkableClimb);
                 delete[] triFlags;
 
@@ -694,7 +730,8 @@ namespace MMAP
                 rcFilterWalkableLowHeightSpans(m_rcContext, tileCfg.walkableHeight, *tile.solid);
 
                 // add liquid triangles
-                rcRasterizeTriangles(m_rcContext, lVerts, lVertCount, lTris, lTriFlags, lTriCount, *tile.solid, config.walkableClimb);
+                rcRasterizeTriangles(m_rcContext, lVerts, lVertCount, lTris, lTriRanks.data(), lTriCount,
+                                     *tile.solid, config.walkableClimb);
 
                 // compact heightfield spans
                 tile.chf = rcAllocCompactHeightfield();
@@ -791,8 +828,13 @@ namespace MMAP
         // set polygons as walkable
         /// @todo: special flags for DYNAMIC polygons, ie surfaces that can be turned on and off
         for (int i = 0; i < iv.polyMesh->npolys; ++i)
+        {
             if (iv.polyMesh->areas[i] & RC_WALKABLE_AREA)
+            {
+                iv.polyMesh->areas[i] = FromMergeRank(iv.polyMesh->areas[i]);
                 iv.polyMesh->flags[i] = iv.polyMesh->areas[i];
+            }
+        }
 
         // setup mesh parameters
         dtNavMeshCreateParams params;

@@ -91,9 +91,9 @@ enum NavTerrain
     NAV_GROUND       = 0x01,
     NAV_MAGMA        = 0x02,
     NAV_SLIME        = 0x04,
-    NAV_WATER        = 0x08,
+    NAV_WATER        = 0x08, // water and ocean; the client lets water walking stand on both
     NAV_GROUND_STEEP = 0x10, // steeper than the client's 50 degree player limit
-    NAV_UNUSED2      = 0x20,
+    NAV_DEEP_WATER   = 0x20, // fatigue water (MAP_LIQUID_TYPE_DARK_WATER)
     NAV_UNUSED3      = 0x40,
     NAV_UNUSED4      = 0x80
                   // we only have 8 bits

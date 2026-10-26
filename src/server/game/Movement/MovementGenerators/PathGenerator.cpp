@@ -759,12 +759,12 @@ void PathGenerator::CreateFilter()
 
         // creatures don't take environmental damage
         if (creature->CanEnterWater())
-            includeFlags |= (NAV_WATER | NAV_MAGMA);
+            includeFlags |= (NAV_WATER | NAV_DEEP_WATER | NAV_MAGMA);
     }
     else // assume Player
     {
         // perfect support not possible, just stay 'safe'
-        includeFlags |= (NAV_GROUND | NAV_GROUND_STEEP | NAV_WATER | NAV_MAGMA);
+        includeFlags |= (NAV_GROUND | NAV_GROUND_STEEP | NAV_WATER | NAV_DEEP_WATER | NAV_MAGMA);
     }
 
     _filter.setIncludeFlags(includeFlags);
@@ -801,17 +801,16 @@ NavTerrain PathGenerator::GetNavTerrain(float x, float y, float z) const
     if (liquidData.Status == LIQUID_MAP_NO_WATER)
         return NAV_GROUND;
 
-    switch (liquidData.Flags)
-    {
-        case MAP_LIQUID_TYPE_WATER:
-        case MAP_LIQUID_TYPE_OCEAN:
-            return NAV_WATER;
-        case MAP_LIQUID_TYPE_MAGMA:
-        case MAP_LIQUID_TYPE_SLIME:
-            return NAV_MAGMA;
-        default:
-            return NAV_GROUND;
-    }
+    // Flags is a mask: dark water comes ORed onto the liquid type
+    if (liquidData.Flags & MAP_LIQUID_TYPE_MAGMA)
+        return NAV_MAGMA;
+    if (liquidData.Flags & MAP_LIQUID_TYPE_SLIME)
+        return NAV_SLIME;
+    if (liquidData.Flags & MAP_LIQUID_TYPE_DARK_WATER)
+        return NAV_DEEP_WATER;
+    if (liquidData.Flags & (MAP_LIQUID_TYPE_WATER | MAP_LIQUID_TYPE_OCEAN))
+        return NAV_WATER;
+    return NAV_GROUND;
 }
 
 bool PathGenerator::HaveTile(G3D::Vector3 const& p) const
@@ -1260,7 +1259,7 @@ bool PathGenerator::IsWaterPath(Movement::PointsArray pathPoints) const
     {
         NavTerrain terrain = GetNavTerrain(pathPoints[i].x, pathPoints[i].y, pathPoints[i].z);
         // One of the points is not in the water
-        if (terrain != NAV_MAGMA && terrain != NAV_WATER)
+        if (terrain == NAV_GROUND)
         {
             waterPath = false;
             break;
